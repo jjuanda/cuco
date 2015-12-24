@@ -16,14 +16,18 @@ class SupervisorApp(object):
         self.http_port = http_port
         self.pidfile   = pidfile
         self.jobs      = []
-        
+
     def add(self, job):
         self.jobs.append(job)
 
     def run(self):
+
         handle, config_file = tempfile.mkstemp(prefix='supervisord_config')
+        hexports, cexports = tempfile.mkstemp(prefix='variables')
+
         print("Starting job:")
         print(" - Config: %s" % config_file)
+        print(" - Exports: %s" % cexports)
 
         config = """[supervisord]
 logfile          = {{log_file}}
@@ -60,30 +64,14 @@ password = pass
         for job in self.jobs:
             job.prepare()
 
-            config = """[program:{{program_name}}]
-command     = {{cmd}}
-directory   = {{base_dir}}
-autostart   = true
-autorestart = true
-stopsignal  = KILL
-killasgroup = true
-stopasgroup = true
-environment = {{env}}
-
-
-"""
-
-            env = Template(config)
-
-            os.write(handle, env.render({
-                "program_name" : job.name,
-                "base_dir"     : job.base_dir,
-                "env"          : job.get_env_str(),
-                "cmd"          : job.cmd
-            }))
+            os.write(handle, job.as_supervisor_program())
+            os.write(hexports, job.as_exports())
 
 
         os.close(handle)
+        os.close(hexports)
+
+
+
 
         local("supervisord -c %s" % config_file)
-
